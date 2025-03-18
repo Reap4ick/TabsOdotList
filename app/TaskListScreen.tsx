@@ -8,51 +8,25 @@ import {
   StyleSheet, 
   Alert 
 } from 'react-native';
-import axios from 'axios';
 import { AntDesign } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Todo } from './types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { initDB, getTodos, deleteTodo, updateTodo } from '../store/db';
 
 type TaskListScreenProps = NativeStackScreenProps<RootStackParamList, 'TaskList'>;
 
-type ApiTodo = {
-  id: number;
-  todo: string;
-  completed: boolean;
-  userId: number;
-};
-
 const TaskListScreen = ({ route }: TaskListScreenProps) => {
-  const [apiTasks, setApiTasks] = useState<Todo[]>([]);
   const [localTasks, setLocalTasks] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'TaskList'>>();
 
-  const saveLocalTasksToStorage = async (tasks: Todo[]) => {
-    try {
-      await AsyncStorage.setItem('tasks', JSON.stringify(tasks));
-    } catch (error) {
-      console.error('Error saving local tasks:', error);
-    }
-  };
-
   const loadData = async () => {
     try {
-      const savedLocalTasksJson = await AsyncStorage.getItem('tasks');
-      const storedLocalTasks: Todo[] = savedLocalTasksJson ? JSON.parse(savedLocalTasksJson) : [];
-      setLocalTasks(storedLocalTasks);
-
-      const response = await axios.get<{ todos: ApiTodo[] }>('https://dummyjson.com/todos');
-      const fetchedApiTasks = response.data.todos.map((task): Todo => ({
-        ...task,
-        date: new Date().toISOString().split('T')[0],
-        priority: 'medium',
-        isLocal: false,
-      }));
-      setApiTasks(fetchedApiTasks);
+      await initDB();
+      const localTodos = await getTodos();
+      setLocalTasks(localTodos);
     } catch (error) {
       Alert.alert('Error', 'Failed to load tasks');
     } finally {
@@ -68,57 +42,29 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
     if (route.params?.newTask) {
       setLocalTasks(prevLocal => {
         const updatedLocal = [...prevLocal, route.params.newTask!];
-        saveLocalTasksToStorage(updatedLocal);
-        // console.log('Current tasks list:', [...apiTasks, ...updatedLocal]);
         return updatedLocal;
       });
     }
-  }, [route.params?.newTask, apiTasks]);
+  }, [route.params?.newTask]);
 
-  const toggleTaskCompletion = (id: number, isLocal: boolean) => {
-    if (isLocal) {
-      setLocalTasks(prev => {
-        const updated = prev.map(task =>
-          task.id === id ? { ...task, completed: !task.completed } : task
-        );
-        saveLocalTasksToStorage(updated);
-        // console.log('Current tasks list:', [...apiTasks, ...updated]);
-        return updated;
-      });
-    } else {
-      setApiTasks(prev => {
-        const updated = prev.map(task =>
-          task.id === id ? { ...task, completed: !task.completed } : task
-        );
-        // console.log('Current tasks list:', [...updated, ...localTasks]);
-        return updated;
-      });
+  const toggleTaskCompletion = async (id: number) => {
+    const task = localTasks.find(task => task.id === id);
+    if (task) {
+      const updatedTask = { ...task, completed: !task.completed };
+      await updateTodo(updatedTask);
+      setLocalTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
     }
   };
 
-  const deleteTask = (id: number, isLocal: boolean) => {
-    if (isLocal) {
-      setLocalTasks(prev => {
-        const updated = prev.filter(task => task.id !== id);
-        saveLocalTasksToStorage(updated);
-        // console.log('Current tasks list:', [...apiTasks, ...updated]);
-        return updated;
-      });
-    } else {
-      setApiTasks(prev => {
-        const updated = prev.filter(task => task.id !== id);
-        // console.log('Current tasks list:', [...updated, ...localTasks]);
-        return updated;
-      });
-    }
+  const deleteTask = async (id: number) => {
+    await deleteTodo(id);
+    setLocalTasks(prev => prev.filter(task => task.id !== id));
   };
-
-  const combinedTasks = [...apiTasks, ...localTasks];
 
   const renderItem = ({ item }: { item: Todo }) => (
     <View style={styles.taskItem}>
       <TouchableOpacity 
-        onPress={() => toggleTaskCompletion(item.id, item.isLocal)} 
+        onPress={() => toggleTaskCompletion(item.id)} 
         style={styles.taskTextContainer}
       >
         <Text style={[styles.taskText, item.completed && styles.completedText]}>
@@ -130,7 +76,7 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
         <Text style={styles.taskPriority}>Priority: {item.priority}</Text>
       </TouchableOpacity>
       <View style={styles.taskActions}>
-        <TouchableOpacity onPress={() => deleteTask(item.id, item.isLocal)}>
+        <TouchableOpacity onPress={() => deleteTask(item.id)}>
           <AntDesign name="delete" size={20} color="red" />
         </TouchableOpacity>
       </View>
@@ -145,10 +91,8 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
         <ActivityIndicator size="large" color="#007BFF" />
       ) : (
         <>
-
-        
           <FlatList
-            data={combinedTasks}
+            data={localTasks}
             renderItem={renderItem}
             keyExtractor={(item) => item.id.toString()}
             ListEmptyComponent={

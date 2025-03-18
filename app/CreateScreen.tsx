@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RootStackParamList, Todo } from './types';
+import { addTodo } from '../store/db';
 
 type FormValues = {
   title: string;
@@ -32,7 +33,7 @@ const CreateTaskScreen = () => {
     }
   };
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     if (!data.title.trim()) {
       Alert.alert('Error', 'Enter task name');
       return;
@@ -47,6 +48,7 @@ const CreateTaskScreen = () => {
       isLocal: true
     };
 
+    await addTodo(newTask);
     navigation.navigate('TaskList', { newTask });
   };
 
@@ -85,7 +87,7 @@ const CreateTaskScreen = () => {
           onChange={handleDateChange}
         />
       )}
-    <Text >Change priority</Text>
+      <Text >Change priority</Text>
       <Controller
         control={control}
         name="priority"
