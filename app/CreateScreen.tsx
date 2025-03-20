@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { RootStackParamList, Todo } from './types';
-import { addTodo } from '../store/db';
+import { useSQLiteContext } from 'expo-sqlite';
+import { drizzle } from 'drizzle-orm/expo-sqlite';
+import { todosTable } from '../store/schema';
 
 type FormValues = {
   title: string;
@@ -14,10 +13,10 @@ type FormValues = {
   priority: 'low' | 'medium' | 'high';
 };
 
-const CreateTaskScreen = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+const CreateTaskScreen = ({ navigation }: any) => {
+  const db = drizzle(useSQLiteContext());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const { control, handleSubmit, formState: { errors }, setValue } = useForm<FormValues>({
+  const { control, handleSubmit, setValue } = useForm<FormValues>({
     defaultValues: {
       title: '',
       date: new Date().toISOString().split('T')[0],
@@ -39,17 +38,18 @@ const CreateTaskScreen = () => {
       return;
     }
 
-    const newTask: Todo = {
-      id: Date.now(),
-      todo: data.title,
-      completed: false,
-      date: data.date,
-      priority: data.priority,
-      isLocal: true
-    };
-
-    await addTodo(newTask);
-    navigation.navigate('TaskList', { newTask });
+    try {
+      await db.insert(todosTable).values({
+        todo: data.title,
+        completed: false,
+        date: data.date,
+        priority: data.priority
+      }).execute();
+      
+      navigation.navigate('TaskList', { refresh: true });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save task');
+    }
   };
 
   return (
@@ -58,19 +58,16 @@ const CreateTaskScreen = () => {
 
       <Controller
         control={control}
-        rules={{ required: 'Name is required' }}
         name="title"
-        render={({ field: { onChange, onBlur, value } }) => (
+        render={({ field: { onChange, value } }) => (
           <TextInput
             style={styles.input}
             placeholder="Enter the name of the task"
-            onBlur={onBlur}
             onChangeText={onChange}
             value={value}
           />
         )}
       />
-      {errors.title && <Text style={styles.error}>{errors.title.message}</Text>}
 
       <TouchableOpacity 
         style={styles.dateButton}
@@ -87,7 +84,8 @@ const CreateTaskScreen = () => {
           onChange={handleDateChange}
         />
       )}
-      <Text >Change priority</Text>
+
+      <Text>Change priority</Text>
       <Controller
         control={control}
         name="priority"
@@ -96,9 +94,9 @@ const CreateTaskScreen = () => {
             selectedValue={value}
             onValueChange={onChange}
             style={styles.picker}>
-            <Picker.Item label="low" value="low" />
-            <Picker.Item label="medium" value="medium" />
-            <Picker.Item label="high" value="high" />
+            <Picker.Item label="Low" value="low" />
+            <Picker.Item label="Medium" value="medium" />
+            <Picker.Item label="High" value="high" />
           </Picker>
         )}
       />

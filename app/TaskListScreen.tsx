@@ -1,32 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  StyleSheet, 
-  Alert 
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, Todo } from './types';
-import { useNavigation } from '@react-navigation/native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { drizzle } from 'drizzle-orm/expo-sqlite';
+import { eq } from 'drizzle-orm';
+import { todosTable, Todo } from '../store/schema';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { initDB, getTodos, deleteTodo, updateTodo } from '../store/db';
+import { RootStackParamList } from './types';
 
-type TaskListScreenProps = NativeStackScreenProps<RootStackParamList, 'TaskList'>;
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
+};
 
-const TaskListScreen = ({ route }: TaskListScreenProps) => {
-  const [localTasks, setLocalTasks] = useState<Todo[]>([]);
+const TaskListScreen = ({ navigation }: Props) => {
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'TaskList'>>();
+  const db = drizzle(useSQLiteContext());
 
-  const loadData = async () => {
+  const loadTodos = async () => {
     try {
-      await initDB();
-      const localTodos = await getTodos();
-      setLocalTasks(localTodos);
+      const result = await db.select().from(todosTable).all();
+      setTodos(result);
     } catch (error) {
       Alert.alert('Error', 'Failed to load tasks');
     } finally {
@@ -35,39 +29,31 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
   };
 
   useEffect(() => {
-    loadData();
+    loadTodos();
   }, []);
 
-  useEffect(() => {
-    if (route.params?.newTask) {
-      setLocalTasks(prevLocal => {
-        const updatedLocal = [...prevLocal, route.params.newTask!];
-        return updatedLocal;
-      });
-    }
-  }, [route.params?.newTask]);
-
-  const toggleTaskCompletion = async (id: number) => {
-    const task = localTasks.find(task => task.id === id);
-    if (task) {
-      const updatedTask = { ...task, completed: !task.completed };
-      await updateTodo(updatedTask);
-      setLocalTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
+  const toggleCompletion = async (id: number) => {
+    const todo = todos.find(t => t.id === id);
+    if (todo) {
+      await db.update(todosTable)
+        .set({ completed: !todo.completed })
+        .where(eq(todosTable.id, id))
+        .execute();
+      loadTodos();
     }
   };
 
-  const deleteTask = async (id: number) => {
-    await deleteTodo(id);
-    setLocalTasks(prev => prev.filter(task => task.id !== id));
+  const deleteTodo = async (id: number) => {
+    await db.delete(todosTable)
+      .where(eq(todosTable.id, id))
+      .execute();
+    loadTodos();
   };
 
   const renderItem = ({ item }: { item: Todo }) => (
     <View style={styles.taskItem}>
-      <TouchableOpacity 
-        onPress={() => toggleTaskCompletion(item.id)} 
-        style={styles.taskTextContainer}
-      >
-        <Text style={[styles.taskText, item.completed && styles.completedText]}>
+      <TouchableOpacity onPress={() => toggleCompletion(item.id)} style={styles.taskTextContainer}>
+        <Text style={[styles.taskText, item.completed ? styles.completedText : undefined]}>
           {item.todo}
         </Text>
         <Text style={styles.taskDate}>
@@ -76,7 +62,7 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
         <Text style={styles.taskPriority}>Priority: {item.priority}</Text>
       </TouchableOpacity>
       <View style={styles.taskActions}>
-        <TouchableOpacity onPress={() => deleteTask(item.id)}>
+        <TouchableOpacity onPress={() => deleteTodo(item.id)}>
           <AntDesign name="delete" size={20} color="red" />
         </TouchableOpacity>
       </View>
@@ -92,7 +78,7 @@ const TaskListScreen = ({ route }: TaskListScreenProps) => {
       ) : (
         <>
           <FlatList
-            data={localTasks}
+            data={todos}
             renderItem={renderItem}
             keyExtractor={(item) => item.id.toString()}
             ListEmptyComponent={

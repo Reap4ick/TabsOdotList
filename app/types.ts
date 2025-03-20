@@ -1,5 +1,5 @@
 export type RootStackParamList = {
-  TaskList: { newTask?: Todo };
+  TaskList: undefined;
   CreateTask: undefined;
 };
 
