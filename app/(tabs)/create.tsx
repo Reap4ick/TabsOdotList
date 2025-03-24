@@ -6,7 +6,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSQLiteContext } from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { todosTable } from '../../store/schema';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useAppDispatch } from '../hook';
+import { incrementNotifications } from '../slices/menuSlice';
 
 type FormValues = {
     title: string;
@@ -16,6 +18,8 @@ type FormValues = {
 
 export default function CreateTaskScreen() {
     const db = drizzle(useSQLiteContext());
+    const router = useRouter();
+    const dispatch = useAppDispatch();
     const [showDatePicker, setShowDatePicker] = useState(false);
     const { control, handleSubmit, setValue, reset } = useForm<FormValues>({
         defaultValues: {
@@ -47,8 +51,12 @@ export default function CreateTaskScreen() {
                 priority: data.priority
             }).execute();
             
-            Alert.alert('Успіх', 'Завдання успішно створене');
+            dispatch(incrementNotifications());
             reset();
+            router.replace({
+                pathname: '/list',
+                params: { refresh: Date.now() } // Додаємо параметр для примусового оновлення
+            });
         } catch (error) {
             Alert.alert('Помилка', 'Не вдалося зберегти завдання');
         }
@@ -96,9 +104,9 @@ export default function CreateTaskScreen() {
                         selectedValue={value}
                         onValueChange={onChange}
                         style={styles.picker}>
-                        <Picker.Item label="low" value="low" />
-                        <Picker.Item label="medium" value="medium" />
-                        <Picker.Item label="high" value="high" />
+                        <Picker.Item label="Низький" value="low" />
+                        <Picker.Item label="Середній" value="medium" />
+                        <Picker.Item label="Високий" value="high" />
                     </Picker>
                 )}
             />
@@ -106,8 +114,6 @@ export default function CreateTaskScreen() {
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit(onSubmit)}>
                 <Text style={styles.submitButtonText}>Створити</Text>
             </TouchableOpacity>
-
-            <Link href="/list" style={styles.backLink}>Перейти до списку</Link>
         </View>
     );
 }
@@ -125,7 +131,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 30,
         marginTop: 20,
-        
     },
     input: {
         backgroundColor: '#fff',
@@ -159,12 +164,6 @@ const styles = StyleSheet.create({
     },
     dateButtonText: {
         color: '#fff',
-        fontSize: 16,
-    },
-    backLink: {
-        color: '#007BFF',
-        textAlign: 'center',
-        marginTop: 15,
         fontSize: 16,
     },
 });

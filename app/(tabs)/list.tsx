@@ -5,17 +5,24 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq } from 'drizzle-orm';
 import { todosTable, Todo } from '../../store/schema';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useAppDispatch } from '../hook';
+import { setNotifications } from '../slices/menuSlice';
 
 export default function TaskListScreen() {
     const [todos, setTodos] = useState<Todo[]>([]);
     const [loading, setLoading] = useState(true);
     const db = drizzle(useSQLiteContext());
+    const dispatch = useAppDispatch();
+    const { refresh } = useLocalSearchParams();
 
     const loadTodos = useCallback(async () => {
         try {
             const result = await db.select().from(todosTable).all();
             setTodos(result);
+            
+            const uncompletedCount = result.filter(todo => !todo.completed).length;
+            dispatch(setNotifications(uncompletedCount));
         } catch (error) {
             console.error(error);
         } finally {
@@ -26,7 +33,7 @@ export default function TaskListScreen() {
     useFocusEffect(
         useCallback(() => {
             loadTodos();
-        }, [loadTodos])
+        }, [loadTodos, refresh])
     );
 
     const toggleCompletion = async (id: number) => {
@@ -36,7 +43,7 @@ export default function TaskListScreen() {
                 .set({ completed: !todo.completed })
                 .where(eq(todosTable.id, id))
                 .execute();
-            loadTodos();
+            loadTodos(); // Оновлюємо список та лічильник
         }
     };
 
@@ -44,7 +51,7 @@ export default function TaskListScreen() {
         await db.delete(todosTable)
             .where(eq(todosTable.id, id))
             .execute();
-        loadTodos();
+        loadTodos(); // Оновлюємо список та лічильник
     };
 
     const renderItem = ({ item }: { item: Todo }) => (
@@ -93,8 +100,8 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8F9FA',
-        paddingHorizontal: 20, // Змінимо з padding на горизонтальний
-        paddingTop: 30, // Додамо відступ зверху
+        paddingHorizontal: 20,
+        paddingTop: 30,
     },
     title: {
         fontSize: 24,

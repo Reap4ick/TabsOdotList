@@ -7,6 +7,8 @@ import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import migrations from '../drizzle/migrations';
 import { todosTable } from '../store/schema';
+import { Provider } from 'react-redux';
+import { store } from './store';
 
 const databaseName = 'todos1.db';
 
@@ -17,13 +19,15 @@ export default function RootLayout() {
         databaseName={databaseName}
         useSuspense
       >
-        <DatabaseProvider>
-          <NavigationContainer>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-            </Stack>
-          </NavigationContainer>
-        </DatabaseProvider>
+        <Provider store={store}>
+          <DatabaseProvider>
+            <NavigationContainer>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+              </Stack>
+            </NavigationContainer>
+          </DatabaseProvider>
+        </Provider>
       </SQLiteProvider>
     </Suspense>
   );
