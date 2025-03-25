@@ -8,6 +8,8 @@ export type Todo = {
   todo: string;
   completed: boolean;
   date: string;
+  time: string;
   priority: 'low' | 'medium' | 'high';
   isLocal: boolean;
+  notificationId: string;
 };

@@ -52,6 +52,14 @@ export default function TabLayout() {
           tabBarBadge: notifications === 0 ? undefined : notifications,
         }}
       />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Повідомлення',
+          tabBarIcon: ({ color }) => <FontAwesome name="bell" size={24} color={color} />,
+        }}
+      />
     </Tabs>
+    
   );
 }
