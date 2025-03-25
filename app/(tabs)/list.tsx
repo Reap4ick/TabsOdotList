@@ -8,6 +8,13 @@ import { todosTable, Todo } from '../../store/schema';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAppDispatch } from '../hook';
 import { setNotifications } from '../slices/menuSlice';
+import * as Notifications from 'expo-notifications';
+
+const notifications = {
+    async cancel(id: string) {
+        await Notifications.cancelScheduledNotificationAsync(id);
+    }
+};
 
 export default function TaskListScreen() {
     const [todos, setTodos] = useState<Todo[]>([]);
@@ -15,6 +22,8 @@ export default function TaskListScreen() {
     const db = drizzle(useSQLiteContext());
     const dispatch = useAppDispatch();
     const { refresh } = useLocalSearchParams();
+
+    
 
     const loadTodos = useCallback(async () => {
         try {
@@ -47,7 +56,8 @@ export default function TaskListScreen() {
         }
     };
 
-    const deleteTodo = async (id: number) => {
+    const deleteTodo = async (id: number, notificationId: string) => {
+        await notifications.cancel(notificationId);
         await db.delete(todosTable)
             .where(eq(todosTable.id, id))
             .execute();
@@ -69,7 +79,7 @@ export default function TaskListScreen() {
                 <Text style={styles.taskPriority}>Пріоритет: {item.priority}</Text>
             </TouchableOpacity>
             <View style={styles.taskActions}>
-                <TouchableOpacity onPress={() => deleteTodo(item.id)}>
+                <TouchableOpacity onPress={() => item.notificationId && deleteTodo(item.id, item.notificationId)}>
                     <AntDesign name="delete" size={20} color="red" />
                 </TouchableOpacity>
             </View>
