@@ -59,6 +59,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <FontAwesome name="bell" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="ProgressBar"
+        options={{
+          title: 'Прогрес Бар',
+          tabBarIcon: ({ color }) => <FontAwesome name="circle" size={24} color={color} />,
+        }}
+      />
     </Tabs>
     
   );
