@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Linking, AppState } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -9,35 +9,9 @@ import { Todo, todosTable } from '../../store/schema';
 import { useRouter } from 'expo-router';
 import { useAppDispatch } from '../hook';
 import { incrementNotifications } from '../slices/menuSlice';
-import * as Notifications from 'expo-notifications';
-import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import { eq } from 'drizzle-orm';
-
-// Налаштування обробника сповіщень
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-// Налаштування категорій сповіщень
-Notifications.setNotificationCategoryAsync('myCategory', [
-  {
-    identifier: 'show',
-    buttonTitle: "Переглянути",
-    options: { opensAppToForeground: true }
-  },
-  {
-    identifier: "delete",
-    buttonTitle: "Видалити",
-    options: { 
-      isDestructive: true,
-      opensAppToForeground: true
-    }
-  }
-]);
+import useNotifications from '../hook/useNotifications';
+import * as Notifications from 'expo-notifications';
 
 export default function CreateTaskScreen() {
   const db = drizzle(useSQLiteContext());
@@ -47,7 +21,6 @@ export default function CreateTaskScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(new Date());
-  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   const { control, handleSubmit, setValue, reset } = useForm<Pick<Todo, 'todo' | 'date' | 'time' | 'priority'>>({
     defaultValues: {
@@ -62,105 +35,35 @@ export default function CreateTaskScreen() {
     }
   });
 
-  // Обробник стану додатка
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active' && pendingTaskId) {
-        setTimeout(() => showDeleteDialog(pendingTaskId), 500);
-        setPendingTaskId(null);
-      }
-    });
+  const { scheduleNotification } = useNotifications({
+    onDelete: async (taskId: string) => {
+      try {
+        await db.delete(todosTable)
+          .where(eq(todosTable.id, parseInt(taskId)))
+          .execute();
 
-    return () => subscription.remove();
-  }, [pendingTaskId]);
+        const notificationIdResult = await db.select({ notificationId: todosTable.notificationId })
+          .from(todosTable)
+          .where(eq(todosTable.id, parseInt(taskId)))
+          .execute();
 
-  // Обробник глибоких посилань
-  const handleDeepLink = (event: { url: string }) => {
-    if (event.url.includes('/delete/')) {
-      const taskId = event.url.split('/delete/')[1];
-      if (taskId) {
-        setPendingTaskId(taskId);
-        Linking.openURL('yourapp://');
-      }
-    }
-  };
-
-  useEffect(() => {
-    const deepLinkSubscription = Linking.addEventListener('url', handleDeepLink);
-    
-    // Обробка сповіщень при холодному запуску
-    Notifications.getLastNotificationResponseAsync().then(response => {
-      if (response) {
-        handleNotificationAction(response);
-      }
-    });
-
-    // Обробник кліків по сповіщеннях
-    const notificationSubscription = Notifications.addNotificationResponseReceivedListener(
-      handleNotificationAction
-    );
-
-    return () => {
-      deepLinkSubscription.remove();
-      notificationSubscription.remove();
-    };
-  }, []);
-
-  const handleNotificationAction = (response: Notifications.NotificationResponse) => {
-    const { actionIdentifier, notification } = response;
-    const taskId = notification.request.content.data.id?.toString();
-
-    if (!taskId) {
-      console.error('Missing task ID in notification');
-      return;
-    }
-
-    if (actionIdentifier === 'delete') {
-      setPendingTaskId(taskId);
-      Linking.openURL('yourapp://');
-    } else if (actionIdentifier === 'show') {
-      router.push('/list');
-    }
-  };
-
-  const showDeleteDialog = (taskId: string) => {
-    Alert.alert(
-      'Видалити завдання',
-      'Ви впевнені, що хочете видалити це завдання?',
-      [
-        { text: 'Скасувати', style: 'cancel' },
-        { 
-          text: 'Видалити', 
-          onPress: async () => {
-            try {
-              await db.delete(todosTable)
-                .where(eq(todosTable.id, parseInt(taskId)))
-                .execute();
-
-              const notificationId = await db.select({ notificationId: todosTable.notificationId })
-                .from(todosTable)
-                .where(eq(todosTable.id, parseInt(taskId)))
-                .execute();
-
-              if (notificationId[0]?.notificationId) {
-                await Notifications.cancelScheduledNotificationAsync(
-                  notificationId[0].notificationId
-                );
-              }
-
-              dispatch(incrementNotifications());
-              router.push({
-                pathname: '/list',
-                params: { refresh: Date.now() }
-              });
-            } catch (error) {
-              Alert.alert('Помилка', 'Не вдалося видалити завдання');
-            }
-          } 
+        if (notificationIdResult[0]?.notificationId) {
+          await Notifications.cancelScheduledNotificationAsync(
+            notificationIdResult[0].notificationId
+          );
         }
-      ]
-    );
-  };
+
+        dispatch(incrementNotifications());
+        router.push({
+          pathname: '/list',
+          params: { refresh: Date.now() }
+        });
+      } catch (error) {
+        Alert.alert('Помилка', 'Не вдалося видалити завдання');
+      }
+    },
+    onShow: () => router.push('/list')
+  });
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -200,22 +103,13 @@ export default function CreateTaskScreen() {
       }).returning({ id: todosTable.id }).execute();
 
       const newTaskId = result[0].id.toString();
+      const notificationDate = new Date(`${data.date}T${data.time}`);
       
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Нагадування: ${data.todo}`,
-          body: "Час виконати завдання!",
-          categoryIdentifier: "myCategory",
-          data: { 
-            id: newTaskId,
-            deepLink: `yourapp://delete/${newTaskId}`
-          },
-        },
-        trigger: {
-          type: SchedulableTriggerInputTypes.DATE,
-          date: new Date(`${data.date}T${data.time}`),
-        },
-      });
+      const notificationId = await scheduleNotification(
+        newTaskId,
+        data.todo,
+        notificationDate
+      );
 
       await db.update(todosTable)
         .set({ notificationId })
