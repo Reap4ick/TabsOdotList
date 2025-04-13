@@ -79,7 +79,9 @@ export default function TaskListScreen() {
                 <Text style={styles.taskPriority}>Пріоритет: {item.priority}</Text>
             </TouchableOpacity>
             <View style={styles.taskActions}>
-                <TouchableOpacity onPress={() => item.notificationId && deleteTodo(item.id, item.notificationId)}>
+                <TouchableOpacity onPress={() => item.notificationId && deleteTodo(item.id, item.notificationId)}
+                    accessibilityRole="button"
+                    accessibilityLabel="delete button">
                     <AntDesign name="delete" size={20} color="red" />
                 </TouchableOpacity>
             </View>
